@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Time value of money: the power of compounding</title>
+
+  <style>
+    :root{
+      --orange:#f07f2f;
+      --peach:#ffd2b8;   /* principal */
+      --green:#cfeab0;   /* total */
+      --ink:#111;
+      --muted:#666;
+      --bg:#fff;
+
+      /* layout constants so the y-axis can be full height and aligned */
+      --years-col: 130px;
+      --col-gap: 18px;
+      --bar-left-pad: 12px;
+      --axis-w: 2px;
+
+      /* Plot width (prevents bars from running into the right-side labels) */
+      --plot-w: clamp(320px, 52vw, 560px);
+      --stats-col: 260px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      background:var(--bg);
+      color:var(--ink);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    .wrap{
+      width:min(1100px, 96vw);
+      margin:22px auto 28px;
+    }
+
+    h1{
+      margin:0 0 14px;
+      text-align:center;
+      color:var(--orange);
+      font-weight:800;
+      letter-spacing:.2px;
+      font-size: clamp(24px, 2.6vw, 40px);
+    }
+
+    .top{
+      display:grid;
+      justify-content:center;
+      align-items:center;
+      grid-template-columns: auto auto;
+      gap:40px;
+      align-items:start;
+      margin: 6px 0 10px;
+    }
+
+    .field{
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+    .label{
+      font-weight:800;
+      font-size: clamp(18px, 1.7vw, 28px);
+      white-space:nowrap;
+    }
+    .sub{
+      width:100%;
+      margin-top:2px;
+      text-align:center;
+      font-size:13px;
+      color:var(--ink);
+      font-weight:600;
+    }
+
+    input{
+      width:120px;
+      padding:10px 12px;
+      border:2px solid #e7e7e7;
+      border-radius: 10px;
+      font-size:16px;
+      outline:none;
+      background:#fff;
+    }
+    input:focus{ border-color:#cfcfcf; }
+
+    /* GRAPH */
+    .graph{
+      position:relative;
+      margin-top: 36px;
+      display:grid;
+      gap:34px;
+      padding-left: 0;
+    }
+
+    /* Full-height Y-axis line aligned with start of bars */
+    .graph::before{
+      content:"";
+      position:absolute;
+      left: calc(var(--years-col) + var(--col-gap));
+      top: 0;
+      bottom: 0;
+      width: var(--axis-w);
+      background:#111;
+      opacity:.9;
+    }
+
+    .row{
+      display:grid;
+      grid-template-columns: var(--years-col) auto var(--stats-col);
+      gap: var(--col-gap);
+      align-items:center;
+    }
+
+    .years{
+      font-weight:900;
+      font-size:22px;
+      text-align:right;
+      padding-right:8px;
+      white-space:nowrap;
+    }
+
+    .barArea{
+      position:relative;
+      padding-left: var(--bar-left-pad);
+      width: var(--plot-w);
+      overflow:hidden; /* hard stop so bars never collide with the labels column */
+    }
+
+    .barTrack{
+      position:relative;
+      height:78px;
+    }
+
+    /* Total bar (green) */
+    .barTotal{
+      position:absolute;
+      left:0;
+      top:0;
+      height:100%;
+      background:var(--green);
+    }
+
+    /* If the total is capped by the axis max, show a subtle hatch at the end */
+    .barTotal.capped::after{
+      content:"";
+      position:absolute;
+      right:0;
+      top:0;
+      width:12px;
+      height:100%;
+      background:
+        linear-gradient(135deg,
+          rgba(0,0,0,.18) 25%,
+          transparent 25%,
+          transparent 50%,
+          rgba(0,0,0,.18) 50%,
+          rgba(0,0,0,.18) 75%,
+          transparent 75%);
+      background-size:10px 10px;
+      opacity:.35;
+      pointer-events:none;
+    }
+
+    /* Principal bar (orange) overlays total */
+    .barPrincipal{
+      position:absolute;
+      left:0;
+      top:0;
+      height:100%;
+      background:var(--peach);
+    }
+
+    /* Right-side per-row mini legend boxes */
+    .stats{
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      justify-content:center;
+      align-items:flex-start;
+      color:var(--muted);
+      font-size:13px;
+    }
+    .stat{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      line-height:1.1;
+      white-space:nowrap;
+    }
+    .swatch{
+      width:14px;
+      height:14px;
+      border-radius:3px;
+      border:1px solid rgba(0,0,0,.08);
+      flex:0 0 auto;
+    }
+    .swatch.principal{ background:var(--peach); }
+    .swatch.total{ background:var(--green); }
+
+    .stat strong{
+      color:#222;
+      font-weight:700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Shared X-axis (0..100k with 5k ticks) */
+    .xAxisRow{
+      display:grid;
+      grid-template-columns: var(--years-col) auto var(--stats-col);
+      gap: var(--col-gap);
+      align-items:start;
+      margin-top:-10px; /* tuck closer to the last bar */
+    }
+    .xAxis{
+      position:relative;
+      padding-left: var(--bar-left-pad);
+      width: var(--plot-w);
+      height:34px;
+    }
+    .xAxisLine{
+      position:absolute;
+      left:0;
+      right:0;
+      top:10px;
+      height:1px;
+      background: rgba(0,0,0,.25);
+    }
+    .tick{
+      position:absolute;
+      top:0;
+      transform: translateX(-50%);
+    }
+    .tick::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:10px;
+      width:1px;
+      background: rgba(0,0,0,.25);
+      transform: translateX(-50%);
+    }
+    .tick.minor::before{ height:6px; }
+    .tick.major::before{ height:10px; }
+    .tick span{
+      position:absolute;
+      top:18px;
+      left:50%;
+      transform: translateX(-50%);
+      font-size:12px;
+      color: var(--muted);
+      white-space:nowrap;
+    }
+
+    @media (max-width: 900px){
+      .row{
+        grid-template-columns: var(--years-col) auto;
+      }
+      .stats{
+        grid-column: 1 / -1;
+        padding-left: calc(var(--years-col) + var(--col-gap) + var(--bar-left-pad));
+        flex-direction:row;
+        flex-wrap:wrap;
+        gap:14px 18px;
+      }
+      .xAxisRow{
+        grid-template-columns: var(--years-col) auto;
+      }
+    }
+
+    @media (max-width: 640px){
+      .top{ grid-template-columns: 1fr; }
+      .row{ grid-template-columns: 1fr; }
+      .years{ text-align:left; padding-right:0; }
+      .graph::before{ display:none; }
+      .stats{ padding-left:0; }
+      .xAxisRow{ grid-template-columns: 1fr; }
+      .xAxis{ padding-left:0; }
+    }
+  
+    .footnote{
+      margin-top:18px;
+      text-align:center;
+      font-size:13px;
+      color:var(--muted);
+    }
+    </style>
+    
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>Time value of money: the power of compounding</h1>
+
+    <div class="top">
+      <div>
+        <div class="field">
+          <div class="label">Amount saved every month:</div>
+          <input id="pmt" type="number" min="0" step="1" inputmode="decimal" />
+        </div>
+        
+      </div>
+
+      <div>
+        <div class="field">
+          <div class="label">Annual interest:</div>
+          <input id="apr" type="number" min="0" step="0.01" inputmode="decimal" />
+        </div>
+      </div>
+    </div>
+
+    <div class="graph" id="graph"></div>
+
+    <!-- Shared X-axis under the graph -->
+    <div class="xAxisRow" aria-hidden="true">
+      <div></div>
+      <div class="xAxis" id="xAxis">
+        <div class="xAxisLine"></div>
+      </div>
+      <div></div>
+    </div>
+
+    <div class="footnote">Savings are assumed to be at the end of each month.</div>
+  </div>
+
+  <script>
+    const DEFAULT_PMT = 50; // $50 on load
+    const DEFAULT_APR = 6;  // 6% on load
+
+    // Fixed x-axis scale: $0 to $100,000 with $5,000 ticks
+    const AXIS_MAX = 100000;
+    const TICK_STEP = 5000;
+
+    const horizons = [
+      { label: "5 years", months: 60 },
+      { label: "10 years", months: 120 },
+      { label: "20 years", months: 240 }
+    ];
+
+    const pmtEl = document.getElementById("pmt");
+    const aprEl = document.getElementById("apr");
+    const graphEl = document.getElementById("graph");
+    const xAxisEl = document.getElementById("xAxis");
+
+    function fmtMoney(x){
+      return x.toLocaleString(undefined, {
+        style:"currency",
+        currency:"USD",
+        maximumFractionDigits:0
+      });
+    }
+
+    function fvOrdinaryAnnuity(pmt, annualRate, nMonths){
+      const r = (annualRate/100)/12;
+      if (r === 0) return pmt * nMonths;
+      return pmt * ((Math.pow(1+r, nMonths) - 1) / r);
+    }
+
+    function buildAxis(){
+      // Minor tick marks every 5k; labels every 25k to avoid clutter.
+      for (let v = 0; v <= AXIS_MAX; v += TICK_STEP){
+        const pct = (v / AXIS_MAX) * 100;
+        const tick = document.createElement("div");
+        const isMajor = (v % 25000 === 0);
+        tick.className = "tick " + (isMajor ? "major" : "minor");
+        tick.style.left = pct + "%";
+
+        if (isMajor){
+          const label = document.createElement("span");
+          label.textContent = (v === 0) ? "$0" : (v/1000) + "k";
+          tick.appendChild(label);
+        }
+        xAxisEl.appendChild(tick);
+      }
+    }
+
+    function buildGraph(){
+      graphEl.innerHTML = "";
+
+      horizons.forEach((h) => {
+        const row = document.createElement("div");
+        row.className = "row";
+
+        const years = document.createElement("div");
+        years.className = "years";
+        years.textContent = h.label;
+
+        const barArea = document.createElement("div");
+        barArea.className = "barArea";
+
+        const track = document.createElement("div");
+        track.className = "barTrack";
+
+        const total = document.createElement("div");
+        total.className = "barTotal";
+
+        const principal = document.createElement("div");
+        principal.className = "barPrincipal";
+
+        track.appendChild(total);
+        track.appendChild(principal);
+        barArea.appendChild(track);
+
+        const stats = document.createElement("div");
+        stats.className = "stats";
+        stats.innerHTML = `
+          <div class="stat">
+            <span class="swatch principal"></span>
+            <span>Principal:</span>
+            <strong data-principal>$0</strong>
+          </div>
+          <div class="stat">
+            <span class="swatch total"></span>
+            <span>Total:</span>
+            <strong data-total>$0</strong>
+          </div>
+        `;
+
+        row.appendChild(years);
+        row.appendChild(barArea);
+        row.appendChild(stats);
+        graphEl.appendChild(row);
+
+        row._refs = {
+          months: h.months,
+          total,
+          principal,
+          principalText: row.querySelector("[data-principal]"),
+          totalText: row.querySelector("[data-total]")
+        };
+      });
+    }
+
+    function update(){
+      const pmt = Math.max(0, Number(pmtEl.value || 0));
+      const apr = Math.max(0, Number(aprEl.value || 0));
+
+      const totals = horizons.map(h => fvOrdinaryAnnuity(pmt, apr, h.months));
+      const principals = horizons.map(h => pmt * h.months);
+
+      const plotPx = xAxisEl.getBoundingClientRect().width - parseFloat(getComputedStyle(xAxisEl).paddingLeft || 0);
+
+      [...graphEl.children].forEach((row, i) => {
+        const totalVal = totals[i];
+        const principalVal = principals[i];
+
+        const totalClamped = Math.min(totalVal, AXIS_MAX);
+        const principalClamped = Math.min(principalVal, AXIS_MAX);
+
+        const totalPx = (totalClamped / AXIS_MAX) * plotPx;
+        const principalPx = (principalClamped / AXIS_MAX) * plotPx;
+
+        row._refs.total.style.width = `${Math.max(2, totalPx)}px`;
+        row._refs.principal.style.width = `${Math.max(2, principalPx)}px`;
+
+        row._refs.total.classList.toggle("capped", totalVal > AXIS_MAX);
+
+        row._refs.principalText.textContent = fmtMoney(principalVal);
+        row._refs.totalText.textContent = fmtMoney(totalVal);
+      });
+    }
+
+    // init
+    pmtEl.value = DEFAULT_PMT;
+    aprEl.value = DEFAULT_APR;
+
+    buildGraph();
+    buildAxis();
+    update();
+
+    ["input","change"].forEach(evt => {
+      pmtEl.addEventListener(evt, update);
+      aprEl.addEventListener(evt, update);
+    });
+    window.addEventListener("resize", update);
+  </script>
+</body>
+</html>
