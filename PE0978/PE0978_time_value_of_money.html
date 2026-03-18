@@ -21,21 +21,43 @@
       --axis-w: 2px;
 
       /* Plot width (prevents bars from running into the right-side labels) */
-      --plot-w: clamp(320px, 52vw, 560px);
+      --plot-w: 440px;
       --stats-col: 260px;
     }
 
     *{ box-sizing:border-box; }
-    body{
+    html, body{
       margin:0;
+      width:100%;
+      height:100%;
+      overflow:hidden;
       background:var(--bg);
       color:var(--ink);
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
     }
 
+    .viewport{
+      position:relative;
+      width:100%;
+      height:100%;
+      overflow:hidden;
+      background:var(--bg);
+    }
+
+    .page{
+      position:absolute;
+      left:0;
+      top:0;
+      width:960px;
+      height:540px;
+      transform-origin:top left;
+      overflow:hidden;
+      background:var(--bg);
+    }
+
     .wrap{
-      width:min(1100px, 96vw);
-      margin:22px auto 28px;
+      width:900px;
+      margin:16px auto 0;
     }
 
     h1{
@@ -44,7 +66,7 @@
       color:var(--orange);
       font-weight:800;
       letter-spacing:.2px;
-      font-size: clamp(24px, 2.6vw, 40px);
+      font-size: 34px;
     }
 
     .top{
@@ -52,7 +74,7 @@
       justify-content:center;
       align-items:center;
       grid-template-columns: auto auto;
-      gap:40px;
+      gap:36px;
       align-items:start;
       margin: 6px 0 10px;
     }
@@ -67,7 +89,7 @@
     }
     .label{
       font-weight:800;
-      font-size: clamp(18px, 1.7vw, 28px);
+      font-size: 24px;
       white-space:nowrap;
     }
     .sub{
@@ -258,32 +280,6 @@
       white-space:nowrap;
     }
 
-    @media (max-width: 900px){
-      .row{
-        grid-template-columns: var(--years-col) auto;
-      }
-      .stats{
-        grid-column: 1 / -1;
-        padding-left: calc(var(--years-col) + var(--col-gap) + var(--bar-left-pad));
-        flex-direction:row;
-        flex-wrap:wrap;
-        gap:14px 18px;
-      }
-      .xAxisRow{
-        grid-template-columns: var(--years-col) auto;
-      }
-    }
-
-    @media (max-width: 640px){
-      .top{ grid-template-columns: 1fr; }
-      .row{ grid-template-columns: 1fr; }
-      .years{ text-align:left; padding-right:0; }
-      .graph::before{ display:none; }
-      .stats{ padding-left:0; }
-      .xAxisRow{ grid-template-columns: 1fr; }
-      .xAxis{ padding-left:0; }
-    }
-  
     .footnote{
       margin-top:18px;
       text-align:center;
@@ -295,38 +291,40 @@
 </head>
 
 <body>
-  <div class="wrap">
-    <h1>Time value of money: the power of compounding</h1>
+  <div class="viewport">
+    <div class="page">
+      <div class="wrap">
+        <h1>Time value of money: the power of compounding</h1>
 
-    <div class="top">
-      <div>
-        <div class="field">
-          <div class="label">Amount saved every month:</div>
-          <input id="pmt" type="number" min="0" step="1" inputmode="decimal" />
-        </div>
-        
-      </div>
+        <div class="top">
+          <div>
+            <div class="field">
+              <div class="label">Amount saved every month:</div>
+              <input id="pmt" type="number" min="0" step="1" inputmode="decimal" />
+            </div>
+          </div>
 
-      <div>
-        <div class="field">
-          <div class="label">Annual interest:</div>
-          <input id="apr" type="number" min="0" step="0.01" inputmode="decimal" />
+          <div>
+            <div class="field">
+              <div class="label">Annual interest:</div>
+              <input id="apr" type="number" min="0" step="0.01" inputmode="decimal" />
+            </div>
+          </div>
         </div>
+
+        <div class="graph" id="graph"></div>
+
+        <div class="xAxisRow" aria-hidden="true">
+          <div></div>
+          <div class="xAxis" id="xAxis">
+            <div class="xAxisLine"></div>
+          </div>
+          <div></div>
+        </div>
+
+        <div class="footnote">Savings are assumed to be at the end of each month.</div>
       </div>
     </div>
-
-    <div class="graph" id="graph"></div>
-
-    <!-- Shared X-axis under the graph -->
-    <div class="xAxisRow" aria-hidden="true">
-      <div></div>
-      <div class="xAxis" id="xAxis">
-        <div class="xAxisLine"></div>
-      </div>
-      <div></div>
-    </div>
-
-    <div class="footnote">Savings are assumed to be at the end of each month.</div>
   </div>
 
   <script>
@@ -347,6 +345,10 @@
     const aprEl = document.getElementById("apr");
     const graphEl = document.getElementById("graph");
     const xAxisEl = document.getElementById("xAxis");
+    const viewportEl = document.querySelector(".viewport");
+    const pageEl = document.querySelector(".page");
+    const DESIGN_W = 960;
+    const DESIGN_H = 540;
 
     function fmtMoney(x){
       return x.toLocaleString(undefined, {
@@ -444,7 +446,8 @@
       const totals = horizons.map(h => fvOrdinaryAnnuity(pmt, apr, h.months));
       const principals = horizons.map(h => pmt * h.months);
 
-      const plotPx = xAxisEl.getBoundingClientRect().width - parseFloat(getComputedStyle(xAxisEl).paddingLeft || 0);
+      const axisStyles = getComputedStyle(xAxisEl);
+      const plotPx = xAxisEl.clientWidth - parseFloat(axisStyles.paddingLeft || 0);
 
       [...graphEl.children].forEach((row, i) => {
         const totalVal = totals[i];
@@ -466,19 +469,56 @@
       });
     }
 
+    function scalePageToViewport(){
+      const viewportW = Math.max(1, viewportEl.clientWidth || 0);
+      const viewportH = Math.max(1, viewportEl.clientHeight || 0);
+      const scale = Math.min(viewportW / DESIGN_W, viewportH / DESIGN_H);
+      const safeScale = (Number.isFinite(scale) && scale > 0) ? scale : 1;
+
+      pageEl.style.left = ((viewportW - (DESIGN_W * safeScale)) / 2) + "px";
+      pageEl.style.top = ((viewportH - (DESIGN_H * safeScale)) / 2) + "px";
+      pageEl.style.transform = "scale(" + safeScale + ")";
+    }
+
+    function relayoutAll(){
+      scalePageToViewport();
+      update();
+    }
+
+    function watchViewportChanges(fn){
+      let lastDpr = window.devicePixelRatio || 1;
+
+      const tick = () => {
+        const dpr = window.devicePixelRatio || 1;
+        if(Math.abs(dpr - lastDpr) > 0.001){
+          lastDpr = dpr;
+          fn();
+        }
+      };
+
+      window.addEventListener("resize", fn, { passive:true });
+
+      if(window.visualViewport){
+        window.visualViewport.addEventListener("resize", fn, { passive:true });
+        window.visualViewport.addEventListener("scroll", fn, { passive:true });
+      }
+
+      setInterval(tick, 250);
+    }
+
     // init
     pmtEl.value = DEFAULT_PMT;
     aprEl.value = DEFAULT_APR;
 
     buildGraph();
     buildAxis();
-    update();
+    relayoutAll();
 
     ["input","change"].forEach(evt => {
       pmtEl.addEventListener(evt, update);
       aprEl.addEventListener(evt, update);
     });
-    window.addEventListener("resize", update);
+    watchViewportChanges(relayoutAll);
   </script>
 </body>
 </html>
